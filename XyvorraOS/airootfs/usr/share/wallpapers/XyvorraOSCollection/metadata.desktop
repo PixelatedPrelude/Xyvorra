@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=XyvorraOS Collection (All Themes)
+Name[en_US]=XyvorraOS Collection (All Themes)
+X-KDE-PluginInfo-Name=XyvorraOSCollection
+X-KDE-PluginInfo-Author=XyvorraOS Team
+X-KDE-PluginInfo-Email=
+X-KDE-PluginInfo-License=GPL
+
+[Wallpaper]
+defaultWallpaperTheme=XyvorraOSCollection
+defaultFileSuffix=.png
+defaultWidth=1920
+defaultHeight=1080

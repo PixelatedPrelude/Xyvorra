@@ -1,0 +1,13 @@
+[Unit]
+Description=XyvorraOS Pre-Boot Setup
+DefaultDependencies=no
+Before=xyvorra-boot-menu.service getty@tty1.service
+After=systemd-user-sessions.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/xyvorra-pre-boot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

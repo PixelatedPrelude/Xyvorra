@@ -1,0 +1,193 @@
+#!/bin/bash
+# XyvorraOS Live USB User Setup Script
+
+set -e
+
+
+# Take control of tty1
+exec < /dev/tty1 > /dev/tty1 2>&1
+chvt 1
+
+# Disable the blinking cursor during setup
+setterm -cursor off
+
+# Color codes for output
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+BOLD='\033[1m'
+
+# XyvorraOS ASCII Banner
+clear
+echo -e "${MAGENTA}${BOLD}"
+cat << "EOF"
+ __   __                               
+ \ \ / /                               
+  \ V /_   ___   _____  _ __ _ __ __ _ 
+   > <| | | \ \ / / _ \| '__| '__/ _` |
+  / . \ |_| |\ V / (_) | |  | | | (_| |
+ /_/ \_\__, | \_/ \___/|_|  |_|  \__,_|
+        __/ |                          
+       |___/                           
+    ═══════════════════════════════════════
+         Live USB Setup - Version 1.0
+    ═══════════════════════════════════════
+EOF
+echo -e "${NC}"
+
+# Check if setup has already been completed
+if [ -f /etc/xyvorra-liveusb-configured ]; then
+    echo -e "${GREEN}Live USB already configured. Starting SDDM...${NC}"
+    sleep 2
+    systemctl start sddm
+    exit 0
+fi
+
+echo -e "${BLUE}Welcome to XyvorraOS Live USB!${NC}"
+echo ""
+echo "This wizard will help you create a user account for this session."
+echo "Your data will persist on this USB drive until reboot (if using persistence)."
+echo ""
+
+# Get username
+while true; do
+    echo -e "${GREEN}Enter your desired username:${NC}"
+    read -p "> " USERNAME
+    
+    # Validate username
+    if [[ -z "$USERNAME" ]]; then
+        echo -e "${RED}Username cannot be empty!${NC}"
+        continue
+    fi
+    
+    if [[ ! "$USERNAME" =~ ^[a-z][-a-z0-9]*$ ]]; then
+        echo -e "${RED}Invalid username. Must start with lowercase letter and contain only lowercase letters, numbers, and hyphens.${NC}"
+        continue
+    fi
+    
+    if id "$USERNAME" &>/dev/null; then
+        echo -e "${RED}User $USERNAME already exists!${NC}"
+        continue
+    fi
+    
+    break
+done
+
+# Get full name (optional)
+echo ""
+echo -e "${GREEN}Enter your full name (optional, press Enter to skip):${NC}"
+read -p "> " FULLNAME
+
+# Get password
+echo ""
+while true; do
+    echo -e "${GREEN}Enter password for $USERNAME:${NC}"
+    read -s -p "> " PASSWORD
+    echo ""
+    
+    if [[ -z "$PASSWORD" ]]; then
+        echo -e "${RED}Password cannot be empty!${NC}"
+        continue
+    fi
+    
+    echo -e "${GREEN}Confirm password:${NC}"
+    read -s -p "> " PASSWORD_CONFIRM
+    echo ""
+    
+    if [[ "$PASSWORD" != "$PASSWORD_CONFIRM" ]]; then
+        echo -e "${RED}Passwords do not match! Please try again.${NC}"
+        continue
+    fi
+    
+    break
+done
+
+# Create the user
+echo ""
+echo -e "${BLUE}Creating user account...${NC}"
+
+# Create user with home directory
+useradd -m -G wheel,audio,video,optical,storage,power,network -s /bin/bash "$USERNAME"
+
+# Set password
+echo "$USERNAME:$PASSWORD" | chpasswd
+
+# Set full name if provided
+if [[ -n "$FULLNAME" ]]; then
+    chfn -f "$FULLNAME" "$USERNAME"
+fi
+
+# Configure sudo access (passwordless for live environment)
+echo "$USERNAME ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/10-xyvorra-live
+
+# Set up auto-login for SDDM
+echo ""
+echo -e "${BLUE}Configuring auto-login...${NC}"
+
+mkdir -p /etc/sddm.conf.d
+
+cat > /etc/sddm.conf.d/xyvorra-autologin.conf << SDDM_EOF
+[Autologin]
+User=$USERNAME
+Session=plasma
+
+[Theme]
+Current=breeze
+
+[General]
+Numlock=on
+SDDM_EOF
+# Mark as configured
+touch /etc/xyvorra-liveusb-configured
+echo "$USERNAME" > /etc/xyvorra-liveusb-user
+
+# Success message
+echo ""
+echo -e "${GREEN}${BOLD}═══════════════════════════════════════${NC}"
+echo -e "${GREEN}${BOLD}  User account created successfully!${NC}"
+echo -e "${GREEN}${BOLD}═══════════════════════════════════════${NC}"
+echo ""
+echo -e "${BLUE}Username:${NC} $USERNAME"
+if [[ -n "$FULLNAME" ]]; then
+    echo -e "${BLUE}Full Name:${NC} $FULLNAME"
+fi
+echo ""
+echo -e "${MAGENTA}Preparing desktop environment...${NC}"
+echo ""
+
+# Enable and start necessary services
+systemctl enable NetworkManager 2>/dev/null || true
+systemctl start NetworkManager 2>/dev/null || true
+
+# Make sure X11 directories exist
+mkdir -p /tmp/.X11-unix
+chmod 1777 /tmp/.X11-unix
+
+# Enable SDDM
+systemctl enable sddm
+
+# Give system a moment to settle
+sleep 2
+
+echo -e "${GREEN}Starting display manager...${NC}"
+sleep 1
+
+# Start SDDM
+systemctl start sddm
+
+# Wait for SDDM to start
+sleep 3
+
+# If SDDM didn't start, try to diagnose
+if ! systemctl is-active --quiet sddm; then
+    echo -e "${RED}SDDM failed to start. Checking logs...${NC}"
+    journalctl -xe -u sddm --no-pager | tail -20
+    echo ""
+    echo -e "${YELLOW}Press Enter to try starting manually...${NC}"
+    read
+    sddm
+fi
+
+exit 0

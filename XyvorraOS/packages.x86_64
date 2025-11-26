@@ -1,0 +1,107 @@
+# Base system
+base
+efibootmgr
+grub
+linux
+linux-firmware
+mkinitcpio
+mkinitcpio-archiso
+syslinux
+
+# Networking
+dhclient
+iptables-nft
+iw
+network-manager-applet
+networkmanager
+nm-connection-editor
+wireless_tools
+wpa_supplicant
+
+# Display server
+xorg-server
+xorg-xrandr
+
+# KDE Plasma - MINIMAL
+kscreen
+kwin
+plasma-desktop
+plasma-nm
+plasma-pa
+plasma-systemmonitor
+plasma-workspace
+powerdevil
+systemsettings
+
+# SDDM Display Manager
+sddm
+sddm-kcm
+
+# Essential KDE Applications
+dolphin
+kate
+
+# Communication
+discord
+
+# Gaming
+#steam
+
+# System Utils
+curl
+dysk
+feh
+fastfetch
+flameshot
+git
+kitty
+nano
+piper
+sudo
+vim
+wget
+
+# Audio
+pipewire
+pipewire-pulse
+wireplumber
+
+# Video
+celluloid
+obs-studio
+xdg-user-dirs
+xf86-video-fbdev
+xf86-video-vesa
+xorg-server
+xorg-xinit
+xorg-xrandr
+
+# Pictures
+gimp
+
+# Fonts
+terminus-font
+ttf-dejavu
+ttf-hack
+ttf-jetbrains-mono
+ttf-liberation
+ttf-ubuntu-font-family
+
+# Archiso Scripts
+arch-install-scripts
+dosfstools
+e2fsprogs
+gptfdisk
+parted
+
+# Productivity
+merkuro
+
+# Apps - Misc (GNOME, utilities, etc.)
+cheese
+gnome-calculator
+gnome-sound-recorder
+gnote
+kolourpaint
+shotwell
+xpad

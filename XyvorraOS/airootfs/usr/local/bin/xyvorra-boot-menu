@@ -1,0 +1,331 @@
+#!/bin/bash
+# XyvorraOS Boot Menu - Choose Live USB or Install
+
+set -e
+
+# Wait a moment for system to settle
+sleep 2
+
+# Ensure we're on tty1
+chvt 1
+
+# Take full control of tty1
+exec < /dev/tty1 > /dev/tty1 2>&1
+
+# Stop any getty that might be running
+systemctl stop getty@tty1.service 2>/dev/null || true
+
+# Clear screen multiple times to ensure clean slate
+for i in {1..3}; do
+    clear
+    sleep 0.1
+done
+
+# Disable cursor blinking
+setterm -cursor off
+
+# Color codes
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+BOLD='\033[1m'
+
+# Function to print banner
+print_banner() {
+    echo -e "${MAGENTA}${BOLD}"
+    cat << "EOF"
+    ╦ ╦┬ ┬┬  ┬┌─┐┬─┐┬─┐┌─┐╔═╗╔═╗
+    ╔╩╦╝└┬┘└┐┌┘│ │├┬┘├┬┘├─┤║ ║╚═╗
+    ╩ ╚═ ┴  └┘ └─┘┴└─┴└─┴ ┴╚═╝╚═╝
+    
+    ═══════════════════════════════════════
+         Welcome to XyvorraOS v1.0
+    ═══════════════════════════════════════
+EOF
+    echo -e "${NC}"
+}
+
+# Function to check network connectivity
+check_network() {
+    if ping -c 1 -W 2 8.8.8.8 &>/dev/null || ping -c 1 -W 2 1.1.1.1 &>/dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Function to show network status
+show_network_status() {
+    echo ""
+    echo -e "${CYAN}╔════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║          Network Status                ║${NC}"
+    echo -e "${CYAN}╚════════════════════════════════════════╝${NC}"
+    
+    if check_network; then
+        echo -e "${GREEN}● Connected to Internet${NC}"
+        # Show active connection
+        local connection=$(nmcli -t -f NAME,TYPE,DEVICE connection show --active | head -n 1)
+        if [[ -n "$connection" ]]; then
+            echo -e "${BLUE}  Active: $(echo $connection | cut -d: -f1)${NC}"
+        fi
+    else
+        echo -e "${RED}● Not Connected${NC}"
+    fi
+    echo ""
+}
+
+# Function to list available WiFi networks
+list_wifi_networks() {
+    echo -e "${BLUE}Scanning for WiFi networks...${NC}"
+    nmcli device wifi rescan 2>/dev/null || true
+    sleep 2
+    
+    echo ""
+    echo -e "${CYAN}Available Networks:${NC}"
+    echo ""
+    
+    nmcli -f SSID,SIGNAL,SECURITY device wifi list | head -n 20
+    echo ""
+}
+
+# Function to connect to WiFi
+connect_wifi() {
+    clear
+    print_banner
+    echo -e "${BLUE}${BOLD}WiFi Connection Setup${NC}"
+    echo ""
+    
+    list_wifi_networks
+    
+    echo -e "${GREEN}Enter WiFi SSID (network name):${NC}"
+    read -p "> " ssid
+    
+    if [[ -z "$ssid" ]]; then
+        echo -e "${RED}SSID cannot be empty!${NC}"
+        sleep 2
+        return 1
+    fi
+    
+    echo ""
+    echo -e "${GREEN}Enter WiFi Password (leave empty for open networks):${NC}"
+    read -s -p "> " password
+    echo ""
+    
+    echo ""
+    echo -e "${YELLOW}Connecting to $ssid...${NC}"
+    
+    if [[ -z "$password" ]]; then
+        # Open network
+        if nmcli device wifi connect "$ssid" 2>/dev/null; then
+            echo -e "${GREEN}✓ Connected successfully!${NC}"
+            sleep 2
+            return 0
+        else
+            echo -e "${RED}✗ Connection failed!${NC}"
+            sleep 2
+            return 1
+        fi
+    else
+        # Secured network
+        if nmcli device wifi connect "$ssid" password "$password" 2>/dev/null; then
+            echo -e "${GREEN}✓ Connected successfully!${NC}"
+            sleep 2
+            return 0
+        else
+            echo -e "${RED}✗ Connection failed! Check your password.${NC}"
+            sleep 2
+            return 1
+        fi
+    fi
+}
+
+# Function to connect to Ethernet
+setup_ethernet() {
+    clear
+    print_banner
+    echo -e "${BLUE}${BOLD}Ethernet Connection Setup${NC}"
+    echo ""
+    
+    # Get list of ethernet devices
+    local eth_devices=$(ip link show | grep -E "^[0-9]+: (eth|enp|eno)" | cut -d: -f2 | tr -d ' ')
+    
+    if [[ -z "$eth_devices" ]]; then
+        echo -e "${RED}No ethernet devices found!${NC}"
+        sleep 2
+        return 1
+    fi
+    
+    echo "Available ethernet devices:"
+    echo "$eth_devices"
+    echo ""
+    
+    # Try to bring up all ethernet connections
+    echo -e "${YELLOW}Activating ethernet connections...${NC}"
+    for device in $eth_devices; do
+        nmcli device connect "$device" 2>/dev/null || true
+    done
+    
+    sleep 3
+    
+    if check_network; then
+        echo -e "${GREEN}✓ Ethernet connected successfully!${NC}"
+        sleep 2
+        return 0
+    else
+        echo -e "${YELLOW}⚠ Ethernet cable might not be connected.${NC}"
+        sleep 2
+        return 1
+    fi
+}
+
+# Function to configure network
+configure_network() {
+    while true; do
+        clear
+        print_banner
+        echo -e "${BLUE}${BOLD}Network Configuration${NC}"
+        show_network_status
+        
+        echo -e "${GREEN}Select connection type:${NC}"
+        echo ""
+        echo -e "  ${BOLD}1)${NC} WiFi"
+        echo -e "  ${BOLD}2)${NC} Ethernet (Wired)"
+        echo -e "  ${BOLD}3)${NC} Skip (Continue without network)"
+        echo -e "  ${BOLD}4)${NC} Back to main menu"
+        echo ""
+        
+        echo -e "${YELLOW}Enter your choice (1-4):${NC}"
+        read -p "> " net_choice
+        
+        case $net_choice in
+            1)
+                connect_wifi
+                if check_network; then
+                    return 0
+                fi
+                ;;
+            2)
+                setup_ethernet
+                if check_network; then
+                    return 0
+                fi
+                ;;
+            3)
+                echo -e "${YELLOW}⚠ Warning: Installation requires network connectivity!${NC}"
+                echo -e "${YELLOW}You can still use Live USB mode without network.${NC}"
+                sleep 3
+                return 1
+                ;;
+            4)
+                return 1
+                ;;
+            *)
+                echo -e "${RED}Invalid choice.${NC}"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+# Main menu function
+main_menu() {
+    while true; do
+        clear
+        print_banner
+        
+        # Show network status at the top
+        show_network_status
+        
+        echo -e "${GREEN}Please select an option:${NC}"
+        echo ""
+        echo -e "  ${BOLD}1)${NC} Live USB Mode - Try XyvorraOS without installing"
+        echo -e "  ${BOLD}2)${NC} Install to Hard Drive - Install XyvorraOS permanently"
+        echo -e "  ${BOLD}3)${NC} Configure Network Connection"
+        echo -e "  ${BOLD}4)${NC} Reboot"
+        echo -e "  ${BOLD}5)${NC} Power Off"
+        echo ""
+        
+        # Check if already configured for live mode
+        if [ -f /etc/xyvorra-liveusb-configured ]; then
+            echo -e "${BLUE}Live USB is already configured. Starting SDDM...${NC}"
+            sleep 2
+            systemctl start sddm
+            exit 0
+        fi
+        
+        echo -e "${YELLOW}Enter your choice (1-5):${NC}"
+        read -p "> " choice
+        
+        case $choice in
+            1)
+                echo ""
+                echo -e "${GREEN}Starting Live USB setup...${NC}"
+                sleep 1
+                setterm -cursor on
+                /usr/local/bin/xyvorra-liveusb-setup
+                exit 0
+                ;;
+            2)
+                # Check network before installation
+                if ! check_network; then
+                    echo ""
+                    echo -e "${YELLOW}⚠ Warning: No network connection detected!${NC}"
+                    echo -e "${YELLOW}Installation requires internet connectivity to download packages.${NC}"
+                    echo ""
+                    echo -e "${CYAN}Would you like to configure network now? (yes/no)${NC}"
+                    read -p "> " configure_now
+                    
+                    if [[ "$configure_now" =~ ^[Yy] ]]; then
+                        configure_network
+                        
+                        # Check again after configuration
+                        if ! check_network; then
+                            echo ""
+                            echo -e "${RED}Installation cannot proceed without network.${NC}"
+                            echo -e "${YELLOW}Please configure network and try again.${NC}"
+                            sleep 3
+                            continue
+                        fi
+                    else
+                        echo -e "${RED}Installation cancelled.${NC}"
+                        sleep 2
+                        continue
+                    fi
+                fi
+                
+                echo ""
+                echo -e "${GREEN}Network confirmed. Starting installation...${NC}"
+                sleep 1
+                setterm -cursor on
+                /usr/local/bin/xyvorra-install
+                exit 0
+                ;;
+            3)
+                configure_network
+                ;;
+            4)
+                echo -e "${BLUE}Rebooting...${NC}"
+                reboot
+                ;;
+            5)
+                echo -e "${BLUE}Powering off...${NC}"
+                poweroff
+                ;;
+            *)
+                echo -e "${RED}Invalid choice. Please enter 1, 2, 3, 4, or 5.${NC}"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+# Ensure NetworkManager is running
+systemctl start NetworkManager 2>/dev/null || true
+sleep 1
+
+# Start main menu
+main_menu

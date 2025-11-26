@@ -1,0 +1,12 @@
+[Unit]
+Description=XyvorraOS Reboot Configuration Check
+After=multi-user.target
+ConditionPathExists=/etc/xyvorra-liveusb-configured
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/xyvorra-reboot-check
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

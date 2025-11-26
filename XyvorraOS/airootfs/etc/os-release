@@ -1,0 +1,11 @@
+NAME="XyvorraOS"
+PRETTY_NAME="Xyvorra"
+ID=xyvorra
+ID_LIKE=arch
+BUILD_ID=rolling
+ANSI_COLOR="38;2;112;41;99"
+HOME_URL="https://github.com/PixelatedPrelude/Xyvorra"
+DOCUMENTATION_URL="https://github.com/PixelatedPrelude/Xyvorra"
+SUPPORT_URL="https://github.com/PixelatedPrelude/Xyvorra/issues"
+BUG_REPORT_URL="https://github.com/PixelatedPrelude/Xyvorra/issues"
+LOGO=xyvorra

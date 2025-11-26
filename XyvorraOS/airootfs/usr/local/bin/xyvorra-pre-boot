@@ -1,0 +1,17 @@
+#!/bin/bash
+# XyvorraOS Pre-Boot Configuration
+# Runs before boot menu to set up environment
+
+# Clear the screen
+clear
+
+# Stop getty on tty1 if it's running
+systemctl stop getty@tty1.service 2>/dev/null || true
+
+# Make sure we're on tty1
+chvt 1
+
+# Set terminal properties
+setterm -blank 0 -powerdown 0
+
+exit 0

@@ -1,0 +1,26 @@
+[Unit]
+Description=XyvorraOS Boot Menu
+After=systemd-user-sessions.service plymouth-quit-wait.service
+Before=getty@tty1.service sddm.service display-manager.service
+ConditionPathExists=!/etc/xyvorra-liveusb-configured
+ConditionKernelCommandLine=!xyvorra_install
+Conflicts=getty@tty1.service
+DefaultDependencies=no
+
+[Service]
+Type=idle
+ExecStartPre=/usr/bin/systemctl stop getty@tty1.service
+ExecStartPre=/usr/bin/chvt 1
+ExecStart=/usr/local/bin/xyvorra-boot-menu
+StandardInput=tty-force
+StandardOutput=tty
+StandardError=journal
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+SendSIGHUP=yes
+SuccessExitStatus=0
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

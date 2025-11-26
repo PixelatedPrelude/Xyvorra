@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=XyvorraOS - Quantum Verdance
+Name[en_US]=XyvorraOS - Quantum Verdance
+X-KDE-PluginInfo-Name=QuantumVerdance
+X-KDE-PluginInfo-Author=XyvorraOS Team
+X-KDE-PluginInfo-Email=
+X-KDE-PluginInfo-License=GPL
+
+[Wallpaper]
+defaultWallpaperTheme=QuantumVerdance
+defaultFileSuffix=.png
+defaultWidth=1920
+defaultHeight=1080

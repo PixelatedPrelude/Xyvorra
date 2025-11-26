@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=XyvorraOS - Galactic Byzantium
+Name[en_US]=XyvorraOS - Galactic Byzantium
+X-KDE-PluginInfo-Name=Galactic Byzantium
+X-KDE-PluginInfo-Author=XyvorraOS Team
+X-KDE-PluginInfo-Email=
+X-KDE-PluginInfo-License=GPL
+
+[Wallpaper]
+defaultWallpaperTheme=Galactic Byzantium
+defaultFileSuffix=.png
+defaultWidth=1920
+defaultHeight=1080

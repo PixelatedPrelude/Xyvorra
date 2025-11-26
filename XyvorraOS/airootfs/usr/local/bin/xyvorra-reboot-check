@@ -1,0 +1,16 @@
+#!/bin/bash
+# XyvorraOS Reboot Check - Ensures SDDM starts properly
+
+if [ -f /etc/xyvorra-liveusb-configured ]; then
+    # We're in live mode and already configured
+    USERNAME=$(cat /etc/xyvorra-liveusb-user 2>/dev/null || echo "")
+    
+    if [ -n "$USERNAME" ]; then
+        # Make sure SDDM config is still valid
+        if [ -f /etc/sddm.conf.d/xyvorra-autologin.conf ]; then
+            systemctl start sddm
+        fi
+    fi
+fi
+
+exit 0

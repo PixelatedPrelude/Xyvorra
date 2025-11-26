@@ -1,0 +1,17 @@
+[Unit]
+Description=XyvorraOS Boot Menu
+After=multi-user.target
+ConditionPathExists=!/etc/xyvorra-liveusb-configured
+ConditionKernelCommandLine=!xyvorra_install
+
+[Service]
+Type=idle
+ExecStart=/usr/local/bin/xyvorra-boot-menu
+StandardInput=tty
+StandardOutput=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,521 @@
+#!/bin/bash
+# XyvorraOS Installation Script
+# Installs XyvorraOS to hard drive with full system configuration
+
+set -e
+
+# Color codes
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+BOLD='\033[1m'
+
+# Global variables
+TARGET_DISK=""
+EFI_PARTITION=""
+ROOT_PARTITION=""
+SWAP_PARTITION=""
+HOSTNAME=""
+USERNAME=""
+USER_PASSWORD=""
+ROOT_PASSWORD=""
+TIMEZONE="America/Los_Angeles"
+LOCALE="en_US.UTF-8"
+
+# Functions
+
+print_banner() {
+    clear
+    echo -e "${MAGENTA}${BOLD}"
+    cat << "EOF"
+ __   __                               
+ \ \ / /                               
+  \ V /_   ___   _____  _ __ _ __ __ _ 
+   > <| | | \ \ / / _ \| '__| '__/ _` |
+  / . \ |_| |\ V / (_) | |  | | | (_| |
+ /_/ \_\__, | \_/ \___/|_|  |_|  \__,_|
+        __/ |                          
+       |___/                           
+    
+    ═══════════════════════════════════════
+         Installation Wizard - v1.0
+    ═══════════════════════════════════════
+EOF
+    echo -e "${NC}"
+}
+
+print_step() {
+    echo ""
+    echo -e "${BLUE}${BOLD}==>${NC}${BOLD} $1${NC}"
+    echo ""
+}
+
+print_error() {
+    echo -e "${RED}${BOLD}ERROR:${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}${BOLD}WARNING:${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}${BOLD}✓${NC} $1"
+}
+
+confirm_action() {
+    local prompt="$1"
+    local response
+    
+    while true; do
+        echo -e "${YELLOW}$prompt (yes/no):${NC}"
+        read -p "> " response
+        case "$response" in
+            yes|YES|y|Y) return 0 ;;
+            no|NO|n|N) return 1 ;;
+            *) echo -e "${RED}Please answer 'yes' or 'no'${NC}" ;;
+        esac
+    done
+}
+
+# Check if running as root
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        print_error "This script must be run as root"
+        exit 1
+    fi
+}
+
+# Welcome screen
+show_welcome() {
+    print_banner
+    echo -e "${GREEN}Welcome to the XyvorraOS Installation Wizard!${NC}"
+    echo ""
+    echo "This wizard will guide you through installing XyvorraOS to your hard drive."
+    echo ""
+    print_warning "This will erase all data on the selected drive!"
+    echo ""
+    
+    if ! confirm_action "Do you want to continue?"; then
+        echo "Installation cancelled."
+        exit 0
+    fi
+}
+
+# Disk selection
+select_disk() {
+    print_step "Step 1: Select Installation Disk"
+    
+    echo "Available disks:"
+    echo ""
+    lsblk -d -o NAME,SIZE,TYPE,MODEL | grep disk
+    echo ""
+    
+    while true; do
+        echo -e "${GREEN}Enter the disk to install to (e.g., sda, nvme0n1, vda):${NC}"
+        read -p "> " disk_name
+        
+        TARGET_DISK="/dev/$disk_name"
+        
+        if [[ ! -b "$TARGET_DISK" ]]; then
+            print_error "Disk $TARGET_DISK does not exist!"
+            continue
+        fi
+        
+        echo ""
+        echo "Selected disk: $TARGET_DISK"
+        lsblk "$TARGET_DISK"
+        echo ""
+        
+        print_warning "ALL DATA ON $TARGET_DISK WILL BE ERASED!"
+        
+        if confirm_action "Are you sure you want to use $TARGET_DISK?"; then
+            break
+        fi
+    done
+}
+
+# Partition disk
+partition_disk() {
+    print_step "Step 2: Partitioning Disk"
+    
+    echo "Creating partition table..."
+    
+    # Detect if system is UEFI or BIOS
+    if [[ -d /sys/firmware/efi ]]; then
+        echo "UEFI system detected"
+        BOOT_MODE="UEFI"
+    else
+        echo "BIOS system detected"
+        BOOT_MODE="BIOS"
+    fi
+    
+    # Unmount any mounted partitions
+    umount -R /mnt 2>/dev/null || true
+    
+    # Wipe the disk
+    wipefs -af "$TARGET_DISK"
+    sgdisk -Z "$TARGET_DISK"
+    
+    if [[ "$BOOT_MODE" == "UEFI" ]]; then
+        # UEFI partitioning scheme
+        echo "Creating GPT partition table for UEFI..."
+        
+        parted -s "$TARGET_DISK" mklabel gpt
+        parted -s "$TARGET_DISK" mkpart primary fat32 1MiB 513MiB
+        parted -s "$TARGET_DISK" set 1 esp on
+        parted -s "$TARGET_DISK" mkpart primary linux-swap 513MiB 4609MiB
+        parted -s "$TARGET_DISK" mkpart primary ext4 4609MiB 100%
+        
+        # Set partition variables based on disk type
+        if [[ "$TARGET_DISK" =~ "nvme" ]]; then
+            EFI_PARTITION="${TARGET_DISK}p1"
+            SWAP_PARTITION="${TARGET_DISK}p2"
+            ROOT_PARTITION="${TARGET_DISK}p3"
+        else
+            EFI_PARTITION="${TARGET_DISK}1"
+            SWAP_PARTITION="${TARGET_DISK}2"
+            ROOT_PARTITION="${TARGET_DISK}3"
+        fi
+        
+    else
+        # BIOS partitioning scheme
+        echo "Creating MBR partition table for BIOS..."
+        
+        parted -s "$TARGET_DISK" mklabel msdos
+        parted -s "$TARGET_DISK" mkpart primary linux-swap 1MiB 4097MiB
+        parted -s "$TARGET_DISK" mkpart primary ext4 4097MiB 100%
+        parted -s "$TARGET_DISK" set 2 boot on
+        
+        if [[ "$TARGET_DISK" =~ "nvme" ]]; then
+            SWAP_PARTITION="${TARGET_DISK}p1"
+            ROOT_PARTITION="${TARGET_DISK}p2"
+        else
+            SWAP_PARTITION="${TARGET_DISK}1"
+            ROOT_PARTITION="${TARGET_DISK}2"
+        fi
+    fi
+    
+    # Wait for partitions to be recognized
+    sleep 2
+    partprobe "$TARGET_DISK"
+    sleep 2
+    
+    print_success "Partitions created"
+}
+
+# Format partitions
+format_partitions() {
+    print_step "Step 3: Formatting Partitions"
+    
+    if [[ "$BOOT_MODE" == "UEFI" ]]; then
+        echo "Formatting EFI partition..."
+        mkfs.fat -F32 "$EFI_PARTITION"
+        print_success "EFI partition formatted"
+    fi
+    
+    echo "Creating swap..."
+    mkswap "$SWAP_PARTITION"
+    swapon "$SWAP_PARTITION"
+    print_success "Swap created and activated"
+    
+    echo "Formatting root partition..."
+    mkfs.ext4 -F "$ROOT_PARTITION"
+    print_success "Root partition formatted"
+}
+
+# Mount partitions
+mount_partitions() {
+    print_step "Step 4: Mounting Partitions"
+    
+    mount "$ROOT_PARTITION" /mnt
+    print_success "Root partition mounted"
+    
+    if [[ "$BOOT_MODE" == "UEFI" ]]; then
+        mkdir -p /mnt/boot/efi
+        mount "$EFI_PARTITION" /mnt/boot/efi
+        print_success "EFI partition mounted"
+    fi
+}
+
+# Install base system
+install_base_system() {
+    print_step "Step 5: Installing Base System"
+    
+    echo "This may take several minutes depending on your internet connection..."
+    echo ""
+    
+    # Read package list
+    if [ -f /etc/xyvorra-packages.list ]; then
+        echo "Loading XyvorraOS package list..."
+        PACKAGE_LIST=$(grep -v '^#' /etc/xyvorra-packages.list | grep -v '^$' | tr '\n' ' ')
+    else
+        echo -e "${YELLOW}Warning: Package list not found, installing minimal system${NC}"
+        PACKAGE_LIST="base base-devel linux linux-firmware networkmanager grub efibootmgr os-prober plasma-desktop plasma-nm plasma-pa sddm konsole dolphin kate firefox xorg sudo nano vim git"
+    fi
+    
+    echo "Installing packages..."
+    echo ""
+    
+    # Install all packages
+    if ! pacstrap -K /mnt $PACKAGE_LIST; then
+        print_error "Package installation failed!"
+        echo ""
+        echo "This could be due to:"
+        echo "  - Network connectivity issues"
+        echo "  - Mirror problems"
+        echo "  - Package conflicts"
+        echo ""
+        
+        if confirm_action "Try installing minimal system instead?"; then
+            pacstrap -K /mnt base base-devel linux linux-firmware networkmanager
+        else
+            echo "Installation aborted."
+            exit 1
+        fi
+    fi
+    
+    print_success "Base system installed"
+}
+
+# Generate fstab
+generate_fstab() {
+    print_step "Step 6: Generating fstab"
+    
+    genfstab -U /mnt >> /mnt/etc/fstab
+    print_success "fstab generated"
+}
+
+# Configure system
+configure_system() {
+    print_step "Step 7: System Configuration"
+    
+    # Hostname
+    while true; do
+        echo -e "${GREEN}Enter hostname for this computer:${NC}"
+        read -p "> " HOSTNAME
+        
+        if [[ -z "$HOSTNAME" ]]; then
+            print_error "Hostname cannot be empty!"
+            continue
+        fi
+        
+        if [[ ! "$HOSTNAME" =~ ^[a-zA-Z0-9-]+$ ]]; then
+            print_error "Invalid hostname. Use only letters, numbers, and hyphens."
+            continue
+        fi
+        
+        break
+    done
+    
+    echo "$HOSTNAME" > /mnt/etc/hostname
+    
+    # Hosts file
+    cat > /mnt/etc/hosts << EOF
+127.0.0.1   localhost
+::1         localhost
+127.0.1.1   $HOSTNAME.localdomain $HOSTNAME
+EOF
+    
+    print_success "Hostname configured: $HOSTNAME"
+    
+    # Timezone
+    echo ""
+    echo -e "${GREEN}Select timezone (or press Enter for America/Los_Angeles):${NC}"
+    read -p "> " user_timezone
+    
+    if [[ -n "$user_timezone" ]]; then
+        TIMEZONE="$user_timezone"
+    fi
+    
+    arch-chroot /mnt ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
+    arch-chroot /mnt hwclock --systohc
+    print_success "Timezone set: $TIMEZONE"
+    
+    # Locale
+    echo "en_US.UTF-8 UTF-8" >> /mnt/etc/locale.gen
+    arch-chroot /mnt locale-gen
+    echo "LANG=en_US.UTF-8" > /mnt/etc/locale.conf
+    print_success "Locale configured"
+}
+
+# Create user account
+create_user() {
+    print_step "Step 8: User Account Creation"
+    
+    # Username
+    while true; do
+        echo -e "${GREEN}Enter username:${NC}"
+        read -p "> " USERNAME
+        
+        if [[ -z "$USERNAME" ]]; then
+            print_error "Username cannot be empty!"
+            continue
+        fi
+        
+        if [[ ! "$USERNAME" =~ ^[a-z][-a-z0-9]*$ ]]; then
+            print_error "Invalid username. Must start with lowercase letter."
+            continue
+        fi
+        
+        break
+    done
+    
+    # User password
+    while true; do
+        echo -e "${GREEN}Enter password for $USERNAME:${NC}"
+        read -s -p "> " USER_PASSWORD
+        echo ""
+        
+        if [[ -z "$USER_PASSWORD" ]]; then
+            print_error "Password cannot be empty!"
+            continue
+        fi
+        
+        echo -e "${GREEN}Confirm password:${NC}"
+        read -s -p "> " password_confirm
+        echo ""
+        
+        if [[ "$USER_PASSWORD" != "$password_confirm" ]]; then
+            print_error "Passwords do not match!"
+            continue
+        fi
+        
+        break
+    done
+    
+    # Root password
+    echo ""
+    while true; do
+        echo -e "${GREEN}Enter root password:${NC}"
+        read -s -p "> " ROOT_PASSWORD
+        echo ""
+        
+        if [[ -z "$ROOT_PASSWORD" ]]; then
+            print_error "Root password cannot be empty!"
+            continue
+        fi
+        
+        echo -e "${GREEN}Confirm root password:${NC}"
+        read -s -p "> " root_confirm
+        echo ""
+        
+        if [[ "$ROOT_PASSWORD" != "$root_confirm" ]]; then
+            print_error "Passwords do not match!"
+            continue
+        fi
+        
+        break
+    done
+    
+    # Create user in chroot
+    arch-chroot /mnt useradd -m -G wheel,audio,video,optical,storage,power,network -s /bin/bash "$USERNAME"
+    echo "$USERNAME:$USER_PASSWORD" | arch-chroot /mnt chpasswd
+    echo "root:$ROOT_PASSWORD" | arch-chroot /mnt chpasswd
+    
+    # Enable sudo for wheel group
+    echo "%wheel ALL=(ALL) ALL" > /mnt/etc/sudoers.d/10-wheel
+    
+    print_success "User $USERNAME created"
+}
+
+# Install and configure GRUB
+install_grub() {
+    print_step "Step 9: Installing GRUB Bootloader"
+    
+    if [[ "$BOOT_MODE" == "UEFI" ]]; then
+        arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=XyvorraOS
+    else
+        arch-chroot /mnt grub-install --target=i386-pc "$TARGET_DISK"
+    fi
+    
+    # Copy custom GRUB theme
+    mkdir -p /mnt/boot/grub/themes
+    cp -r /boot/grub/themes/xyvorra /mnt/boot/grub/themes/ 2>/dev/null || true
+    
+    # Generate GRUB config
+    arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
+    
+    print_success "GRUB installed"
+}
+
+# Enable services
+enable_services() {
+    print_step "Step 10: Enabling System Services"
+    
+    arch-chroot /mnt systemctl enable NetworkManager
+    arch-chroot /mnt systemctl enable sddm
+    
+    print_success "Services enabled"
+}
+
+# Configure SDDM
+configure_sddm() {
+    print_step "Step 11: Configuring Display Manager"
+    
+    mkdir -p /mnt/etc/sddm.conf.d
+    
+    cat > /mnt/etc/sddm.conf.d/xyvorra-sddm.conf << EOF
+[Theme]
+Current=breeze
+CursorTheme=breeze_cursors
+
+[General]
+Numlock=on
+
+[X11]
+ServerArguments=-nolisten tcp
+EOF
+    
+    print_success "SDDM configured"
+}
+
+# Final steps
+finalize_installation() {
+    print_step "Step 12: Finalizing Installation"
+    
+    # Unmount partitions
+    umount -R /mnt
+    swapoff "$SWAP_PARTITION"
+    
+    print_success "Installation complete!"
+    echo ""
+    echo -e "${GREEN}${BOLD}═══════════════════════════════════════${NC}"
+    echo -e "${GREEN}${BOLD}  XyvorraOS Successfully Installed!${NC}"
+    echo -e "${GREEN}${BOLD}═══════════════════════════════════════${NC}"
+    echo ""
+    echo -e "${BLUE}System Information:${NC}"
+    echo "  Hostname: $HOSTNAME"
+    echo "  Username: $USERNAME"
+    echo "  Disk: $TARGET_DISK"
+    echo ""
+    echo -e "${MAGENTA}Please remove the installation media and reboot.${NC}"
+    echo ""
+    
+    if confirm_action "Reboot now?"; then
+        reboot
+    fi
+}
+
+# Main installation flow
+main() {
+    check_root
+    show_welcome
+    select_disk
+    partition_disk
+    format_partitions
+    mount_partitions
+    install_base_system
+    generate_fstab
+    configure_system
+    create_user
+    install_grub
+    enable_services
+    configure_sddm
+    finalize_installation
+}
+
+# Run main installation
+main

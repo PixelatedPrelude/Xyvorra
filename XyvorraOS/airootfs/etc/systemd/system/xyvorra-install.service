@@ -1,0 +1,20 @@
+[Unit]
+Description=XyvorraOS Installation Service
+After=getty@tty1.service
+Before=sddm.service
+ConditionKernelCommandLine=xyvorra_install
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/systemctl stop getty@tty1.service
+ExecStart=/usr/local/bin/xyvorra-install
+StandardInput=tty-force
+StandardOutput=inherit
+StandardError=inherit
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+
+[Install]
+WantedBy=multi-user.target

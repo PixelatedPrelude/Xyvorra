@@ -1,0 +1,65 @@
+# XyvorraOS GRUB Theme
+# Based on Galactic Byzantium color scheme
+
+# General settings
+title-text: ""
+desktop-image: "background.png"
+desktop-color: "#001D30"
+terminal-font: "Terminus Regular 14"
+terminal-box: "terminal_box_*.png"
+
+# Boot menu
++ boot_menu {
+    left = 15%
+    top = 25%
+    width = 70%
+    height = 60%
+    item_font = "Terminus Bold 16"
+    item_color = "#049e47"
+    selected_item_color = "#FFFFFF"
+    selected_item_pixmap_style = "select_*.png"
+    item_height = 32
+    item_padding = 8
+    item_spacing = 12
+    icon_width = 32
+    icon_height = 32
+}
+
+# Progress bar (for loading)
++ progress_bar {
+    id = "__progress__"
+    left = 15%
+    top = 85%
+    width = 70%
+    height = 24
+    font = "Terminus Regular 12"
+    text_color = "#049e47"
+    fg_color = "#702963"
+    bg_color = "#001D30"
+    border_color = "#049e47"
+}
+
+# Text display
++ label {
+    top = 10%
+    left = 0
+    width = 100%
+    height = 32
+    align = "center"
+    id = "__timeout__"
+    text = "Boot in %d seconds"
+    color = "#049e47"
+    font = "Terminus Bold 14"
+}
+
+# Welcome message
++ label {
+    top = 5%
+    left = 0
+    width = 100%
+    height = 40
+    align = "center"
+    text = "XyvorraOS v1.0"
+    color = "#702963"
+    font = "Terminus Bold 20"
+}
